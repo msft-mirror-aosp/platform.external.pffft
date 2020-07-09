@@ -1,0 +1,19 @@
+name: "pffft"
+description:
+    "A pretty fast FFT. "
+    "This is a fork of Julien Pommier's PFFFT. The original hasn't been "
+    "maintained since 2016, while this one is actively developed on."
+
+third_party {
+  url {
+    type: HOMEPAGE
+    value: "https://github.com/marton78/pffft"
+  }
+  url {
+    type: GIT
+    value: "https://github.com/marton78/pffft.git"
+  }
+  version: "eeb17fc8a08078372de542647841750136e1cf85"
+  last_upgrade_date { year: 2020 month: 6 day: 3 }
+  license_type: NOTICE
+}
