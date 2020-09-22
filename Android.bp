@@ -9,4 +9,9 @@ cc_library_static {
     host_supported: true,
     device_supported: false,
     visibility: ["//external/webrtc:__subpackages__"],
+    target: {
+        linux_bionic_arm64: {
+            cflags: ["-DPFFFT_SIMD_DISABLE"],
+        },
+    },
 }
