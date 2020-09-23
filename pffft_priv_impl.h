@@ -2182,6 +2182,7 @@ void FUNC_VALIDATE_SIMD_A()
 
 int FUNC_VALIDATE_SIMD_EX(FILE * DbgOut)
 {
+  (void)DbgOut;
   return -1;
 }
 
