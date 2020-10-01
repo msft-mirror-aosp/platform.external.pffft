@@ -1,12 +1,24 @@
 cc_library_static {
     name: "libpffft",
+    // vendor needed for libpreprocessing effects.
+    vendor: true,
     srcs: [
         "pffft.c",
-	"pffft_common.c",
+        "pffft_common.c",
     ],
     local_include_dirs: ["."],
     export_include_dirs: ["."],
     host_supported: true,
-    device_supported: false,
     visibility: ["//external/webrtc:__subpackages__"],
+    cflags: [
+        "-Wno-#pragma-messages",
+    ],
+    arch: {
+        arm: {
+            cflags: ["-DPFFFT_ENABLE_NEON"],
+        },
+        arm64: {
+            cflags: ["-DPFFFT_ENABLE_NEON"],
+        },
+    },
 }
