@@ -12,6 +12,11 @@ license is BSD-like.
 PFFASTCONV does fast convolution (FIR filtering), of single precision 
 real vectors, utilizing the PFFFT library. The license is BSD-like.
 
+PFDSP contains a few other signal processing functions.
+Currently, mixing and carrier generation functions are contained.
+It is work in progress - also the API!
+The fast convolution from PFFASTCONV might get merged into PFDSP.
+
 
 ## Why does it exist:
 
@@ -98,6 +103,11 @@ and `libPFFASTCONV.a` from the source files, plus the additional
 `libFFTPACK.a` library. Later one's sources are there anyway for the benchmark.
 
 
+## Origin:
+Origin for this code is Julien Pommier's pffft on bitbucket:
+[https://bitbucket.org/jpommier/pffft/](https://bitbucket.org/jpommier/pffft/)
+
+
 ## Comparison with other FFTs:
 
 The idea was not to break speed records, but to get a decently fast
@@ -113,6 +123,27 @@ array in their arguments.
 It is also a bit focused on performing 1D convolutions, that is why it
 provides "unordered" FFTs , and a fourier domain convolution
 operation.
+
+Very interesting is [https://www.nayuki.io/page/free-small-fft-in-multiple-languages](https://www.nayuki.io/page/free-small-fft-in-multiple-languages).
+It shows how small an FFT can be - including the Bluestein algorithm, but it's everything else than fast.
+The whole C++ implementation file is 161 lines, including the Copyright header, see
+[https://github.com/nayuki/Nayuki-web-published-code/blob/master/free-small-fft-in-multiple-languages/FftComplex.cpp](https://github.com/nayuki/Nayuki-web-published-code/blob/master/free-small-fft-in-multiple-languages/FftComplex.cpp)
+
+## Dependencies / Required Linux packages
+
+On Debian/Ubuntu Linux following packages should be installed:
+
+```
+sudo apt-get install build-essential gcc g++ cmake
+```
+
+for benchmarking, you should have additional packages:
+```
+sudo apt-get install libfftw3-dev gnuplot
+```
+
+run the benchmarks with `./bench_all.sh ON` , to include benchmarks of fftw3 ..
+more details in README of [https://github.com/hayguen/pffft_benchmarks](https://github.com/hayguen/pffft_benchmarks)
 
 
 ## Benchmark results
