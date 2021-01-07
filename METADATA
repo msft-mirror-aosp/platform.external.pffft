@@ -9,11 +9,11 @@ third_party {
     type: GIT
     value: "https://github.com/marton78/pffft.git"
   }
-  version: "7ed5e2a45040ae91c0b2fade901a503c77ccf381"
+  version: "b9819ffacac25e62727fc854f8c78522fb4eb2b3"
   license_type: NOTICE
   last_upgrade_date {
     year: 2020
-    month: 7
-    day: 11
+    month: 12
+    day: 29
   }
 }
