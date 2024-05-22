@@ -1,0 +1,107 @@
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_license//rules:license_kind.bzl", "license_kind")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        ":SPDX-license-identifier-Apache-2.0",
+        ":SPDX-license-identifier-BSD",
+        ":SPDX-license-identifier-MIT",
+    ],
+    visibility = [":__subpackages__"],
+)
+
+license_kind(
+    name = "SPDX-license-identifier-Apache-2.0",
+    conditions = ["notice"],
+    url = "https://spdx.org/licenses/Apache-2.0.html",
+)
+
+license_kind(
+    name = "SPDX-license-identifier-MIT",
+    conditions = ["notice"],
+    url = "https://spdx.org/licenses/MIT.html",
+)
+
+license_kind(
+    name = "SPDX-license-identifier-BSL-1.0",
+    conditions = ["notice"],
+    url = "https://spdx.org/licenses/BSL-1.0.html",
+)
+
+license_kind(
+    name = "SPDX-license-identifier-BSD",
+    conditions = ["notice"],
+    url = "https://spdx.org/licenses/BSD-3-Clause.html",
+)
+
+SIMD_COPTS_ARM64 = [
+    "-Wno-vla",
+    "-Wno-#pragma-messages",
+    "-Wno-absolute-value",
+    "-O3",
+]
+
+SIMD_COPTS_X64 = [
+    "-DPFFFT_SCALVEC_ENABLED=1 ",
+    "-D_USE_MATH_DEFINES",
+    "-O3",
+    "-Wno-#pragma-messages",
+    "-Wno-absolute-value",
+    "-msse4.2",
+    "-mpopcnt",
+]
+
+SIMD_COPTS = select({
+    "@platforms//os:windows": SIMD_COPTS_X64,
+    "@platforms//os:linux": SIMD_COPTS_X64,
+    "@platforms//os:macos": SIMD_COPTS_ARM64,
+})
+
+cc_library(
+    name = "pffft",
+    srcs = [
+        "pffft.c",
+        "pffft_common.c",
+        "pffft_double.c",
+        "pffft_double.h",
+        "pffft_priv_impl.h",
+    ] + glob(["simd/*.h"]),
+    hdrs = [
+        "pffft.h",
+        "pffft.hpp",
+    ],
+    copts = SIMD_COPTS,
+)
+
+cc_library(
+    name = "fftpack",
+    testonly = 1,
+    srcs = [
+        "fftpack.c",
+    ],
+    hdrs = [
+        "fftpack.h",
+    ],
+    copts = SIMD_COPTS,
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "pffft_test",
+    testonly = 1,
+    srcs = [
+        "pffft_double.h",
+        "test_pffft.c",
+    ],
+    copts = SIMD_COPTS,
+    deps = [
+        ":fftpack",
+        ":pffft",
+    ],
+)
