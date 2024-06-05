@@ -43,8 +43,11 @@ cc_library_static {
     local_include_dirs: ["."],
     export_include_dirs: ["."],
     host_supported: true,
-    visibility: ["//external/webrtc:__subpackages__",
-        "//frameworks/av/media/libaudioclient/tests",],
+    visibility: [
+        "//external/webrtc:__subpackages__",
+        "//frameworks/av/media/libaudioclient/tests",
+        "//hardware/interfaces/audio/aidl/vts",
+    ],
     cflags: [
         "-Wno-#pragma-messages",
     ],
