@@ -47,6 +47,7 @@ cc_library_static {
         "//external/webrtc:__subpackages__",
         "//frameworks/av/media/libaudioclient/tests",
         "//hardware/interfaces/audio/aidl/vts",
+        "//vendor:__subpackages__",
     ],
     cflags: [
         "-Wno-#pragma-messages",
