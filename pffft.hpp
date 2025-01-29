@@ -33,8 +33,10 @@
 #include <complex>
 #include <vector>
 #include <limits>
+#include <cassert>
 
-namespace {
+namespace pffft {
+namespace detail {
 #if defined(PFFFT_ENABLE_FLOAT) || ( !defined(PFFFT_ENABLE_FLOAT) && !defined(PFFFT_ENABLE_DOUBLE) )
 #include "pffft.h"
 #endif
@@ -42,11 +44,12 @@ namespace {
 #include "pffft_double.h"
 #endif
 }
+}
 
 namespace pffft {
 
 // enum { PFFFT_REAL, PFFFT_COMPLEX }
-typedef pffft_transform_t TransformType;
+typedef detail::pffft_transform_t TransformType;
 
 // define 'Scalar' and 'Complex' (in namespace pffft) with template Types<>
 // and other type specific helper functions
@@ -55,35 +58,47 @@ template<typename T> struct Types {};
 template<> struct Types<float>  {
   typedef float  Scalar;
   typedef std::complex<Scalar> Complex;
-  static int simd_size() { return pffft_simd_size(); }
-  static const char * simd_arch() { return pffft_simd_arch(); }
+  static int simd_size() { return detail::pffft_simd_size(); }
+  static const char * simd_arch() { return detail::pffft_simd_arch(); }
+  static int minFFtsize() { return pffft_min_fft_size(detail::PFFFT_REAL); }
+  static bool isValidSize(int N) { return pffft_is_valid_size(N, detail::PFFFT_REAL); }
+  static int nearestTransformSize(int N, bool higher) { return pffft_nearest_transform_size(N, detail::PFFFT_REAL, higher ? 1 : 0); }
 };
 template<> struct Types< std::complex<float> >  {
   typedef float  Scalar;
   typedef std::complex<float>  Complex;
-  static int simd_size() { return pffft_simd_size(); }
-  static const char * simd_arch() { return pffft_simd_arch(); }
+  static int simd_size() { return detail::pffft_simd_size(); }
+  static const char * simd_arch() { return detail::pffft_simd_arch(); }
+  static int minFFtsize() { return pffft_min_fft_size(detail::PFFFT_COMPLEX); }
+  static bool isValidSize(int N) { return pffft_is_valid_size(N, detail::PFFFT_COMPLEX); }
+  static int nearestTransformSize(int N, bool higher) { return pffft_nearest_transform_size(N, detail::PFFFT_COMPLEX, higher ? 1 : 0); }
 };
 #endif
 #if defined(PFFFT_ENABLE_DOUBLE)
 template<> struct Types<double> {
   typedef double Scalar;
   typedef std::complex<Scalar> Complex;
-  static int simd_size() { return pffftd_simd_size(); }
-  static const char * simd_arch() { return pffftd_simd_arch(); }
+  static int simd_size() { return detail::pffftd_simd_size(); }
+  static const char * simd_arch() { return detail::pffftd_simd_arch(); }
+  static int minFFtsize() { return pffftd_min_fft_size(detail::PFFFT_REAL); }
+  static bool isValidSize(int N) { return pffftd_is_valid_size(N, detail::PFFFT_REAL); }
+  static int nearestTransformSize(int N, bool higher) { return pffftd_nearest_transform_size(N, detail::PFFFT_REAL, higher ? 1 : 0); }
 };
 template<> struct Types< std::complex<double> > {
   typedef double Scalar;
   typedef std::complex<double> Complex;
-  static int simd_size() { return pffftd_simd_size(); }
-  static const char * simd_arch() { return pffftd_simd_arch(); }
+  static int simd_size() { return detail::pffftd_simd_size(); }
+  static const char * simd_arch() { return detail::pffftd_simd_arch(); }
+  static int minFFtsize() { return pffftd_min_fft_size(detail::PFFFT_COMPLEX); }
+  static bool isValidSize(int N) { return pffftd_is_valid_size(N, detail::PFFFT_COMPLEX); }
+  static int nearestTransformSize(int N, bool higher) { return pffftd_nearest_transform_size(N, detail::PFFFT_COMPLEX, higher ? 1 : 0); }
 };
 #endif
 
 // Allocator
 template<typename T> class PFAlloc;
 
-namespace {
+namespace detail {
   template<typename T> class Setup;
 }
 
@@ -122,15 +137,21 @@ public:
   static bool isFloatScalar()  { return sizeof(Scalar) == sizeof(float); }
   static bool isDoubleScalar() { return sizeof(Scalar) == sizeof(double); }
 
-  // simple helper to get minimum possible fft length
-  static int minFFtsize() { return pffft_min_fft_size( isComplexTransform() ? PFFFT_COMPLEX : PFFFT_REAL ); }
-
   // simple helper to determine next power of 2 - without inexact/rounding floating point operations
-  static int nextPowerOfTwo(int N) { return pffft_next_power_of_two(N); }
-  static bool isPowerOfTwo(int N) { return pffft_is_power_of_two(N) ? true : false; }
+  static int nextPowerOfTwo(int N) { return detail::pffft_next_power_of_two(N); }
+  static bool isPowerOfTwo(int N) { return detail::pffft_is_power_of_two(N) ? true : false; }
+
 
   static int simd_size() { return Types<T>::simd_size(); }
   static const char * simd_arch() { return Types<T>::simd_arch(); }
+
+  // simple helper to get minimum possible fft length
+  static int minFFtsize() { return Types<T>::minFFtsize(); }
+
+  // helper to determine nearest transform size - factorizable to minFFtsize() with factors 2, 3, 5
+  static bool isValidSize(int N) { return Types<T>::isValidSize(N); }
+  static int nearestTransformSize(int N, bool higher=true) { return Types<T>::nearestTransformSize(N, higher); }
+
 
   //////////////////
 
@@ -146,6 +167,14 @@ public:
    */
   Fft( int length, int stackThresholdLen = 4096 );
 
+
+  /*
+   * constructor or prepareLength() produced a valid FFT instance?
+   * delivers false for invalid FFT sizes
+   */
+  bool isValid() const;
+
+
   ~Fft();
 
   /*
@@ -153,8 +182,9 @@ public:
    * length is identical to forward()'s input vector's size,
    * and also equals inverse()'s output vector size.
    * this function is no simple setter. it pre-calculates twiddle factors.
+   * returns true if newLength is >= minFFtsize, false otherwise
    */
-  void prepareLength(int newLength);
+  bool prepareLength(int newLength);
 
   /*
    * retrieve the transformation length.
@@ -216,6 +246,8 @@ public:
    *     the imag() part contains the result for the Nyquist frequency Samplerate/2
    *   both 0-frequency and half frequency components, which are real,
    *   are assembled in the first entry as  F(0)+i*F(N/2).
+   *   with the output size N/2 complex values, it is obvious, that the
+   *   result for negative frequencies are not output, cause of symmetry.
    *
    * input and output may alias - if you do nasty type conversion.
    * return is just the given output parameter 'spectrum'.
@@ -355,7 +387,7 @@ public:
                              const Scalar scaling);
 
 private:
-  Setup<T> setup;
+  detail::Setup<T> setup;
   Scalar* work;
   int length;
   int stackThresholdLen;
@@ -364,26 +396,21 @@ private:
 
 template<typename T>
 inline T* alignedAlloc(int length) {
-  return (T*)pffft_aligned_malloc( length * sizeof(T) );
+  return (T*)detail::pffft_aligned_malloc( length * sizeof(T) );
 }
 
 inline void alignedFree(void *ptr) {
-  pffft_aligned_free(ptr);
+    detail::pffft_aligned_free(ptr);
 }
 
-
-// simple helper to get minimum possible fft length
-inline int minFFtsize(pffft_transform_t transform) {
-  return pffft_min_fft_size(transform);
-}
 
 // simple helper to determine next power of 2 - without inexact/rounding floating point operations
 inline int nextPowerOfTwo(int N) {
-  return pffft_next_power_of_two(N);
+  return detail::pffft_next_power_of_two(N);
 }
 
 inline bool isPowerOfTwo(int N) {
-  return pffft_is_power_of_two(N) ? true : false;
+  return detail::pffft_is_power_of_two(N) ? true : false;
 }
 
 
@@ -392,7 +419,7 @@ inline bool isPowerOfTwo(int N) {
 
 // implementation
 
-namespace {
+namespace detail {
 
 template<typename T>
 class Setup
@@ -413,6 +440,8 @@ public:
     : self(NULL)
   {}
 
+  ~Setup() { pffft_destroy_setup(self); }
+
   void prepareLength(int length)
   {
     if (self) {
@@ -421,7 +450,7 @@ public:
     self = pffft_new_setup(length, PFFFT_REAL);
   }
 
-  ~Setup() { pffft_destroy_setup(self); }
+  bool isValid() const { return (self); }
 
   void transform_ordered(const Scalar* input,
                          Scalar* output,
@@ -461,6 +490,7 @@ public:
   }
 };
 
+
 template<>
 class Setup< std::complex<float> >
 {
@@ -483,6 +513,8 @@ public:
     }
     self = pffft_new_setup(length, PFFFT_COMPLEX);
   }
+
+  bool isValid() const { return (self); }
 
   void transform_ordered(const Scalar* input,
                          Scalar* output,
@@ -545,6 +577,8 @@ public:
     }
   }
 
+  bool isValid() const { return (self); }
+
   void transform_ordered(const Scalar* input,
                          Scalar* output,
                          Scalar* work,
@@ -606,6 +640,8 @@ public:
     self = pffftd_new_setup(length, PFFFT_COMPLEX);
   }
 
+  bool isValid() const { return (self); }
+
   void transform_ordered(const Scalar* input,
                          Scalar* output,
                          Scalar* work,
@@ -651,9 +687,9 @@ public:
 
 template<typename T>
 inline Fft<T>::Fft(int length, int stackThresholdLen)
-  : length(0)
+  : work(NULL)
+  , length(0)
   , stackThresholdLen(stackThresholdLen)
-  , work(NULL)
 {
 #if (__cplusplus >= 201103L || (defined(_MSC_VER) && _MSC_VER >= 1900))
   static_assert( sizeof(Complex) == 2 * sizeof(Scalar), "pffft requires sizeof(std::complex<>) == 2 * sizeof(Scalar)" );
@@ -670,20 +706,34 @@ inline Fft<T>::~Fft()
 }
 
 template<typename T>
-inline void
+inline bool
+Fft<T>::isValid() const
+{
+  return setup.isValid();
+}
+
+template<typename T>
+inline bool
 Fft<T>::prepareLength(int newLength)
 {
+  if(newLength < minFFtsize())
+    return false;
+
   const bool wasOnHeap = ( work != NULL );
 
   const bool useHeap = newLength > stackThresholdLen;
 
   if (useHeap == wasOnHeap && newLength == length) {
-    return;
+    return true;
   }
 
-  length = newLength;
+  length = 0;
 
-  setup.prepareLength(length);
+  setup.prepareLength(newLength);
+  if (!setup.isValid())
+    return false;
+
+  length = newLength;
 
   if (work) {
     alignedFree(work);
@@ -693,6 +743,8 @@ Fft<T>::prepareLength(int newLength)
   if (useHeap) {
     work = reinterpret_cast<Scalar*>( alignedAllocType(length) );
   }
+
+  return true;
 }
 
 
@@ -795,10 +847,11 @@ template<typename T>
 inline typename Fft<T>::Complex *
 Fft<T>::forward(const T* input, Complex * spectrum)
 {
+  assert(isValid());
   setup.transform_ordered(reinterpret_cast<const Scalar*>(input),
                           reinterpret_cast<Scalar*>(spectrum),
                           work,
-                          PFFFT_FORWARD);
+                          detail::PFFFT_FORWARD);
   return spectrum;
 }
 
@@ -806,10 +859,11 @@ template<typename T>
 inline T*
 Fft<T>::inverse(Complex const* spectrum, T* output)
 {
+  assert(isValid());
   setup.transform_ordered(reinterpret_cast<const Scalar*>(spectrum),
                           reinterpret_cast<Scalar*>(output),
                           work,
-                          PFFFT_BACKWARD);
+                          detail::PFFFT_BACKWARD);
   return output;
 }
 
@@ -817,10 +871,11 @@ template<typename T>
 inline typename pffft::Fft<T>::Scalar*
 Fft<T>::forwardToInternalLayout(const T* input, Scalar* spectrum_internal_layout)
 {
+  assert(isValid());
   setup.transform(reinterpret_cast<const Scalar*>(input),
                   spectrum_internal_layout,
                   work,
-                  PFFFT_FORWARD);
+                  detail::PFFFT_FORWARD);
   return spectrum_internal_layout;
 }
 
@@ -828,10 +883,11 @@ template<typename T>
 inline T*
 Fft<T>::inverseFromInternalLayout(const Scalar* spectrum_internal_layout, T* output)
 {
+  assert(isValid());
   setup.transform(spectrum_internal_layout,
                   reinterpret_cast<Scalar*>(output),
                   work,
-                  PFFFT_BACKWARD);
+                  detail::PFFFT_BACKWARD);
   return output;
 }
 
@@ -839,7 +895,8 @@ template<typename T>
 inline void
 Fft<T>::reorderSpectrum( const Scalar* input, Complex* output )
 {
-  setup.reorder(input, reinterpret_cast<Scalar*>(output), PFFFT_FORWARD);
+  assert(isValid());
+  setup.reorder(input, reinterpret_cast<Scalar*>(output), detail::PFFFT_FORWARD);
 }
 
 template<typename T>
@@ -849,6 +906,7 @@ Fft<T>::convolveAccumulate(const Scalar* dft_a,
                            Scalar* dft_ab,
                            const Scalar scaling)
 {
+  assert(isValid());
   setup.convolveAccumulate(dft_a, dft_b, dft_ab, scaling);
   return dft_ab;
 }
@@ -860,6 +918,7 @@ Fft<T>::convolve(const Scalar* dft_a,
                  Scalar* dft_ab,
                  const Scalar scaling)
 {
+  assert(isValid());
   setup.convolve(dft_a, dft_b, dft_ab, scaling);
   return dft_ab;
 }
@@ -961,7 +1020,7 @@ class PFAlloc {
 
     // allocate but don't initialize num elements of type T
     pointer allocate (size_type num, const void* = 0) {
-        pointer ret = (pointer)( alignedAlloc<T>(num) );
+        pointer ret = (pointer)( alignedAlloc<T>(int(num)) );
         return ret;
     }
 
