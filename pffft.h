@@ -117,13 +117,26 @@ extern "C" {
 
      Transforms are not scaled: PFFFT_BACKWARD(PFFFT_FORWARD(x)) = N*x.
      Typically you will want to scale the backward transform by 1/N.
-     
+
      The 'work' pointer should point to an area of N (2*N for complex
      fft) floats, properly aligned. If 'work' is NULL, then stack will
      be used instead (this is probably the best strategy for small
      FFTs, say for N < 16384). Threads usually have a small stack, that
      there's no sufficient amount of memory, usually leading to a crash!
      Use the heap with pffft_aligned_malloc() in this case.
+
+     For a real forward transform (PFFFT_REAL | PFFFT_FORWARD) with real
+     input with input(=transformation) length N, the output array is
+     'mostly' complex:
+       index k in 1 .. N/2 -1  corresponds to frequency k * Samplerate / N
+       index k == 0 is a special case:
+         the real() part contains the result for the DC frequency 0,
+         the imag() part contains the result for the Nyquist frequency Samplerate/2
+     both 0-frequency and half frequency components, which are real,
+     are assembled in the first entry as  F(0)+i*F(N/2).
+     With the output size N/2 complex values (=N real/imag values), it is
+     obvious, that the result for negative frequencies are not output,
+     cause of symmetry.
 
      input and output may alias.
   */
@@ -199,6 +212,18 @@ extern "C" {
 
   /* simple helper to determine if power of 2 - returns bool */
   int pffft_is_power_of_two(int N);
+
+  /* simple helper to determine size N is valid
+     - factorizable to pffft_min_fft_size() with factors 2, 3, 5
+     returns bool
+  */
+  int pffft_is_valid_size(int N, pffft_transform_t cplx);
+
+  /* determine nearest valid transform size  (by brute-force testing)
+     - factorizable to pffft_min_fft_size() with factors 2, 3, 5.
+     higher: bool-flag to find nearest higher value; else lower.
+  */
+  int pffft_nearest_transform_size(int N, pffft_transform_t cplx, int higher);
 
   /*
     the float buffers must have the correct alignment (16-byte boundary
